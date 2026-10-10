@@ -1,99 +1,63 @@
-# Switchboard Offensive Testing Analysis
+# Documentation Security Review — Switchboard On-Demand Integration Guides
 
-## Overview
-This document summarizes potential attack vectors and security considerations for Switchboard On-Demand oracle system based on documentation review.
+Scope: review of the integration guidance in this repository for patterns that lead
+consumers to build insecure integrations. No live deployment, RPC endpoint, or signing
+material was used. Every finding below is sourced from repository content.
 
-## Attack Surface Analysis
+## Findings
 
-### 1. Trusted Execution Environment (TEE) Layer
-- **Target**: Intel SGX used for oracle worker security
-- **Vectors**:
-  - Side-channel attacks (cache timing, power analysis, SGXFail variants)
-  - Enclave escape vulnerabilities
-  - Attestation replay or manipulation
-  - Certificate validation bypass (mitigated by weekly rotation)
+### 1. Feed account validation shown commented out (High)
+Files:
+- `switchboard/readme/links-and-technical-documentation/integrating-on-chain-svm.md:45-49`
+- `product-documentation/data-feeds/solana-svm/part-3-integrating-your-feed/integrating-your-feed-on-chain.md:48-51`
 
-### 2. Oracle Worker Compromise
-- **Target**: Oracle Worker component fetching and signing data
-- **Vectors**:
-  - Malicious task injection via compromised job definitions
-  - Key extraction from memory
-  - Selective data manipulation (subtle price changes)
-  - Denial of service to specific feeds/users
+The examples parse the feed account with the public-key check present only as a comment:
 
-### 3. Queue/Gateway Manipulation
-- **Target**: Oracle Queue management and frontend gateway
-- **Vectors**:
-  - Sybil attacks to add malicious oracles
-  - Reputation gaming to influence oracle selection
-  - Gateway DOS via request flooding
-  - Man-in-the-middle between clients and oracles
+```rust
+// if ctx.accounts.feed.key != &specific_pubkey {
+//     throwSomeError
+// }
+```
 
-### 4. Feed/Job Definition Attacks
-- **Target**: Oracle Job definitions and task execution
-- **Vectors**:
-  - Variable expansion injection (if `${VAR}` not properly sanitized)
-  - Cache task poisoning to extract secrets
-  - Malicious HTTP tasks causing SSRF or data exfiltration
-  - Resource exhaustion via complex/compute-heavy tasks
-  - JSON parsing exploits (if using vulnerable parsers)
+Impact: `feed` is declared as `AccountInfo<'info>` (unchecked). A caller can substitute an
+arbitrary account, and a consumer following the example as written trusts whatever data is
+passed. This is an account-substitution vector, and it is presented as the normal pattern
+rather than as an omission to fix.
 
-### 5. Randomness Manipulation (VRF feeds)
-- **Target**: Commitment/reveal phases and entropy sources
-- **Vectors**:
-  - Predictable randomness through state manipulation
-  - Biasing entropy sources
-  - Replay attacks on commitments
-  - Front-running reveal transactions
+Fix: make the check live code in every example. Prefer an `address = ...` constraint, or
+`Account<'info, ...>` with an explicit owner/type check, where the feed is fixed.
 
-### 6. Cross-Chain/Consistency Attacks
-- **Target**: Multi-chain synchronization and state consistency
-- **Vectors**:
-  - Inconsistent state between chains
-  - Bridge exploits affecting oracle data
-  - Chain reorg manipulation to present conflicting data
-  - Governance attacks if DAO-controlled parameters exist
+### 2. `unwrap()` on account parse (Medium)
+Files:
+- `switchboard/readme/links-and-technical-documentation/developers-build-and-use.md:52`
+- `switchboard/readme/links-and-technical-documentation/integrating-on-chain-svm.md:52`
+- `switchboard/readme/migrating-to-switchboard/using-pyth/with-solana.md:98`
+- `product-documentation/data-feeds/solana-svm/part-3-integrating-your-feed/integrating-your-feed-on-chain.md:54`
 
-### 7. Upgrade/Admin Interface Attacks
-- **Target**: Oracle/gordinator approval and upgrade mechanisms
-- **Vectors**:
-  - Gaming guardian approval processes
-  - Certificate validation bypasses
-  - Malicious upgrade proposal injection
-  - Key rotation attack vectors
+`PullFeedAccountData::parse(feed_account).unwrap()` panics on malformed data. Return a
+program error instead. On an instruction other code depends on, an unconditional panic is a
+griefing surface.
 
-### 8. Denial of Service Vectors
-- **Target**: Availability of oracle services
-- **Vectors**:
-  - Gateway/request flooding
-  - Price exhaustion attacks (if paid service)
-  - Oracle worker resource exhaustion
-  - Network-layer attacks on oracle infrastructure
+### 3. Staleness and variance defaults undocumented (Medium)
+Files:
+- `switchboard/readme/links-and-technical-documentation/creating-a-solana-feed.md:115` (`maxStaleness: 60`)
+- `switchboard/readme/links-and-technical-documentation/creating-a-solana-feed.md:244` (`maxStaleness: 300`)
+- `product-documentation/data-feeds/starknet.md:56-58` (`maxStaleness: 100`, `maxVariance: 5e9`)
+- `switchboard/readme/on-sui/getting-started.md:43-46`
+- `switchboard/readme/on-aptos/getting-started.md:142-145`
+- `product-documentation/data-feeds/movement.md:181-184`
 
-## Documented Mitigations to Verify
-- Weekly SGX certificate re-verification
-- Guardian consensus for oracle onboarding
-- TEEs preventing operator observation of data
-- Recent slot usage to mitigate front-running
-- Distributed architecture for redundancy
+These parameters decide whether stale or divergent data is accepted. The guides give values
+with one-line comments and no discussion of the tradeoff. A consumer copying
+`maxStaleness: 300` accepts roughly two minutes of staleness at ~400ms slots. `maxVariance`
+ranges from `1.0` (Solana examples) to `1e9` (Sui/Aptos) to `5e9` (Starknet) across guides,
+with no explanation of the unit or the consequence of the spread.
 
-## Recommended Testing Approach
-1. **Static Analysis**: Review Switchboard-on-demand crate for memory safety issues
-2. **Dynamic Analysis**: Test oracle worker in isolated environment with malicious job definitions
-3. **Network Testing**: Assess gateway resilience to malformed requests and flooding
-4. **Cryptographic Review**: Verify signature schemes and commitment schemes
-5. **Game Theory Analysis**: Evaluate economic incentives for honest vs malicious behavior
+### 4. No read-time staleness enforcement shown (Low/Medium)
+The `value(&clock)` / `get_value` read path does not itself bound staleness, and the
+integration examples do not show passing an explicit tolerance at read time. Consumers may
+reasonably assume the read is freshness-checked when it is not.
 
-## Files Reviewed
-- switchboard/readme/security.md
-- switchboard/readme/architecture-design.md
-- switchboard/readme/links-and-technical-documentation/developers-build-and-use.md
-- switchboard/readme/oracle-aggregator.md
-- switchboard/readme/designing-feeds/how-feeds-are-resolved.md
-- switchboard/switchboard-randomness/technical-docs.md
-- switchboard/switchboard-randomness/on-evm-networks.md
-- switchboard/switchboard-randomness/on-solana-svm-networks.md
-
-## Conclusion
-Switchboard employs multiple security layers (TEEs, guardian consensus, distributed architecture) but presents a complex attack surface. Offensive testing should focus on TEE vulnerabilities, oracle worker compromise, job definition injection, and queue manipulation vectors. The weekly SGX certificate rotation reduces but does not eliminate enclave attack windows.
-
+## Note on method
+Read-only review of repository files. No live systems were contacted and no credentials or
+signing material were used or requested.
