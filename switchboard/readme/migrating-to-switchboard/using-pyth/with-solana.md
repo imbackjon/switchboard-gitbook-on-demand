@@ -95,7 +95,9 @@ pub fn example(ctx: Context<Example>) -> Result<()> {
 ```rust
 pub fn example(ctx: Context<Example>) -> Result<()> {
     let feed_account = ctx.accounts.feed.data.borrow();
-    let feed = PullFeedAccountData::parse(feed_account).unwrap();
+    // Fail the instruction instead of panicking if the account can't be parsed
+    let feed = PullFeedAccountData::parse(feed_account)
+        .map_err(|_| error!(MyProgramError::FeedParseFailed))?;
     let feed_id: [u8; 32] = get_feed_id_from_hex("0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43")?;
     // Get the value, a https://docs.rs/rust_decimal/latest/rust_decimal/struct.Decimal.html
     let clock = Clock::get()?;
