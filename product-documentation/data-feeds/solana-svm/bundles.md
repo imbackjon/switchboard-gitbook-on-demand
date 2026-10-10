@@ -78,7 +78,7 @@ let verified_bundle = BundleVerifierBuilder::from(&bundle)
     .unwrap();
 
 // Extract verified price
-let price = verified_bundle.feed(FEED_HASH)?.value();
+let price = verified_bundle.feed(FEED_HASH)?.value(&clock);
 ```
 
 ## Bundle Size Optimization
@@ -129,7 +129,7 @@ pub fn liquidate_position(ctx: Context<Liquidate>, bundle: Vec<u8>) -> Result<()
 
     // Extract BTC price
     let btc_feed = verified_bundle.feed(BTC_FEED_ID)?;
-    let btc_price = btc_feed.value();
+    let btc_price = btc_feed.value(&clock);
 
     // Check if position is underwater
     let ltv = calculate_ltv(ctx.accounts.position, btc_price);

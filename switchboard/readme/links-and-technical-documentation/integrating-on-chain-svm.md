@@ -42,16 +42,22 @@ pub mod sb_on_demand_solana {
         // Feed account data
         let feed_account = ctx.accounts.feed.data.borrow();
         
-        // This is where you should verify that this account is specifically the one you're trying to read
-        // Compare the public keys
-        // if ctx.accounts.feed.key != &specific_pubkey {
-        //     throwSomeError
-        // }
+        // Verify that this account is the one you intend to read.
+        // `feed` is an unchecked AccountInfo, so a caller could pass any account:
+        // compare keys and abort on mismatch instead of trusting the passed-in account.
+        // (specific_pubkey and the error variant are placeholders — use your feed's pubkey and your program's error)
+        if ctx.accounts.feed.key() != &specific_pubkey {
+            return err!(MyProgramError::InvalidFeedAccount);
+        }
         
         // Docs at: https://switchboard-on-demand-rust-docs.web.app/on_demand/accounts/pull_feed/struct.PullFeedAccountData.html
-        let feed = PullFeedAccountData::parse(feed_account).unwrap();
+        let feed = PullFeedAccountData::parse(feed_account)
+            .map_err(|_| error!(MyProgramError::FeedParseFailed))?;
+        let clock = Clock::get()?;
+        // Add a staleness check appropriate to your program before trusting
+        // the price (see get_value below for reading within the feed's window).
         // Log the value
-        msg!("price: {:?}", feed.value());
+        msg!("price: {:?}", feed.value(&clock));
         Ok(())
     }
 }

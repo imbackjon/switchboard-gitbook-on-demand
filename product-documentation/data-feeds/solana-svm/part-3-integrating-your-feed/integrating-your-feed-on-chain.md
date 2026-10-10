@@ -45,13 +45,17 @@ This section guides you through the process of incorporating Switchboard data fe
 
             let clock = Clock::get()?;
 
-            // Verify that this account is the intended one by comparing public keys
-            // if ctx.accounts.feed.key != &specific_pubkey {
-            //     throwSomeError
-            // }
+            // Verify that this account is the intended one by comparing public keys.
+            // `feed` is an unchecked AccountInfo, so a caller could pass any account:
+            // compare keys and abort on mismatch.
+            // (specific_pubkey and the error variant are placeholders for your program's own)
+            if ctx.accounts.feed.key() != &specific_pubkey {
+                return err!(MyProgramError::InvalidFeedAccount);
+            }
 
             // Docs at: https://switchboard-on-demand-rust-docs.web.app/on_demand/accounts/pull_feed/struct.PullFeedAccountData.html
-            let feed = PullFeedAccountData::parse(feed_account).unwrap();
+            let feed = PullFeedAccountData::parse(feed_account)
+                .map_err(|_| error!(MyProgramError::FeedParseFailed))?;
             // Log the value
             msg!("price: {:?}", feed.value(&clock));
             Ok(())
