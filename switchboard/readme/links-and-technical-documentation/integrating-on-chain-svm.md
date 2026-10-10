@@ -50,8 +50,9 @@ pub mod sb_on_demand_solana {
         
         // Docs at: https://switchboard-on-demand-rust-docs.web.app/on_demand/accounts/pull_feed/struct.PullFeedAccountData.html
         let feed = PullFeedAccountData::parse(feed_account).unwrap();
+        let clock = Clock::get()?;
         // Log the value
-        msg!("price: {:?}", feed.value());
+        msg!("price: {:?}", feed.value(&clock));
         Ok(())
     }
 }

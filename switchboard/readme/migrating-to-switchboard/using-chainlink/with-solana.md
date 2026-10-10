@@ -122,7 +122,8 @@ pub fn example(ctx: Context<Example>) -> Result<()> {
     let price_update = &mut ctx.accounts.feed;
     let feed_id: [u8; 32] = get_feed_id_from_hex("0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43")?;
     // Get the value, a https://docs.rs/rust_decimal/latest/rust_decimal/struct.Decimal.html
-    let price = feed.value();
+    let clock = Clock::get()?;
+    let price = feed.value(&clock);
     // Log the Decimal Value
     msg!("price: {:?}", price);
     Ok(())
